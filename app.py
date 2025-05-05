@@ -8,6 +8,8 @@ import joblib
 import os
 import json
 import logging
+from routes.players import players_bp
+from routes.submissions import submissions_bp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +54,10 @@ except Exception as e:
 
 # File to store the daily pool
 DAILY_POOL_FILE = 'daily_pool.json'
+
+# Register blueprints
+app.register_blueprint(players_bp)
+app.register_blueprint(submissions_bp)
 
 @app.route('/health', methods=['GET'])
 def health_check():
