@@ -3,8 +3,24 @@ from datetime import datetime
 import psycopg2
 from psycopg2.extras import Json
 import os
+import numpy as np
+import logging
+import joblib
 
 submissions_bp = Blueprint('submissions', __name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load the model and scaler
+try:
+    model = joblib.load('best_model.joblib')
+    scaler = joblib.load('scaler.joblib')
+    logger.info("Successfully loaded model and scaler")
+except Exception as e:
+    logger.error(f"Error loading model or scaler: {str(e)}")
+    raise
 
 def get_db_connection():
     conn = psycopg2.connect(
@@ -105,4 +121,59 @@ def get_leaderboard():
         if 'cur' in locals():
             cur.close()
         if 'conn' in locals():
-            conn.close() 
+            conn.close()
+
+@submissions_bp.route('/api/predict', methods=['POST', 'OPTIONS'])
+def predict():
+    if request.method == 'OPTIONS':
+        return '', 204
+    try:
+        data = request.json
+        selected_players = data.get('players', [])
+        
+        if not selected_players:
+            return jsonify({'error': 'No players selected'}), 400
+        
+        # Calculate team statistics
+        team_stats = {
+            'points': sum(float(p['Points Per Game (Avg)']) for p in selected_players),
+            'rebounds': sum(float(p['Rebounds Per Game (Avg)']) for p in selected_players),
+            'assists': sum(float(p['Assists Per Game (Avg)']) for p in selected_players),
+            'steals': sum(float(p['Steals Per Game (Avg)']) for p in selected_players),
+            'blocks': sum(float(p['Blocks Per Game (Avg)']) for p in selected_players),
+            'turnovers': sum(float(p['Turnovers Per Game (Avg)']) for p in selected_players),
+            'fg_pct': sum(float(p['Field Goal % (Avg)']) for p in selected_players) / len(selected_players),
+            'ft_pct': sum(float(p['Free Throw % (Avg)']) for p in selected_players) / len(selected_players),
+            'three_pct': sum(float(p['Three Point % (Avg)']) for p in selected_players) / len(selected_players),
+            'plus_minus': sum(float(p['Plus Minus (Avg)']) for p in selected_players) / len(selected_players),
+            'off_rating': sum(float(p['Offensive Rating (Avg)']) for p in selected_players) / len(selected_players),
+            'def_rating': sum(float(p['Defensive Rating (Avg)']) for p in selected_players) / len(selected_players),
+            'net_rating': sum(float(p['Net Rating (Avg)']) for p in selected_players) / len(selected_players),
+            'usage': sum(float(p['Usage % (Avg)']) for p in selected_players) / len(selected_players),
+            'pie': sum(float(p['Player Impact Estimate (Avg)']) for p in selected_players) / len(selected_players)
+        }
+        
+        # Scale the features
+        features = np.array([[
+            team_stats['points'],
+            team_stats['rebounds'],
+            team_stats['assists'],
+            team_stats['steals'],
+            team_stats['blocks'],
+            team_stats['fg_pct'],
+            team_stats['ft_pct'],
+            team_stats['three_pct']
+        ]])
+        
+        scaled_features = scaler.transform(features)
+        
+        # Make prediction
+        predicted_wins = model.predict(scaled_features)[0]
+        
+        # Ensure prediction stays within reasonable bounds
+        predicted_wins = max(8, min(74, predicted_wins))
+        
+        return jsonify({'predicted_wins': predicted_wins})
+    except Exception as e:
+        logger.error(f"Error in predict: {str(e)}")
+        return jsonify({'error': str(e)}), 500 
