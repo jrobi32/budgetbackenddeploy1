@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: nba-budget-game-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: DB_HOST
+        value: dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com
+      - key: DB_NAME
+        value: budgetgm
+      - key: DB_USER
+        value: budgetgm_user
+      - key: DB_PASSWORD
+        value: aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx 
