@@ -23,23 +23,31 @@ except Exception as e:
     logger.error(f"Error loading model or scaler: {str(e)}")
     raise
 
-# Create a connection pool
-try:
-    connection_pool = pool.SimpleConnectionPool(
-        1,  # minconn
-        10,  # maxconn
-        host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
-        database=os.getenv('DB_NAME', 'budgetgm'),
-        user=os.getenv('DB_USER', 'budgetgm_user'),
-        password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
-        sslmode='require'
-    )
-    logger.info("Successfully created connection pool")
-except Exception as e:
-    logger.error(f"Error creating connection pool: {str(e)}")
-    raise
+# Global connection pool
+connection_pool = None
+
+def init_connection_pool():
+    global connection_pool
+    if connection_pool is None:
+        try:
+            connection_pool = pool.SimpleConnectionPool(
+                1,  # minconn
+                10,  # maxconn
+                host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
+                database=os.getenv('DB_NAME', 'budgetgm'),
+                user=os.getenv('DB_USER', 'budgetgm_user'),
+                password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
+                sslmode='require'
+            )
+            logger.info("Successfully created connection pool")
+        except Exception as e:
+            logger.error(f"Error creating connection pool: {str(e)}")
+            raise
 
 def get_db_connection():
+    global connection_pool
+    if connection_pool is None:
+        init_connection_pool()
     try:
         conn = connection_pool.getconn()
         if conn:
