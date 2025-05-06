@@ -23,13 +23,17 @@ except Exception as e:
     raise
 
 def get_db_connection():
-    conn = psycopg2.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        database=os.getenv('DB_NAME', 'budgetgm'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', '')
-    )
-    return conn
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
+            database=os.getenv('DB_NAME', 'budgetgm'),
+            user=os.getenv('DB_USER', 'budgetgm_user'),
+            password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx')
+        )
+        return conn
+    except Exception as e:
+        logger.error(f"Error connecting to database: {str(e)}")
+        raise
 
 @submissions_bp.route('/api/submit-team', methods=['POST'])
 def submit_team():
@@ -83,9 +87,12 @@ def submit_team():
 
 @submissions_bp.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
+    conn = None
+    cur = None
     try:
         # Get date from query parameter or use current date
         date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+        logger.info(f"Fetching leaderboard for date: {date}")
         
         conn = get_db_connection()
         cur = conn.cursor()
@@ -109,18 +116,26 @@ def get_leaderboard():
                 'results': row[2]
             })
         
+        logger.info(f"Found {len(submissions)} submissions for date {date}")
         return jsonify({
             'date': date,
             'submissions': submissions
         }), 200
         
+    except psycopg2.Error as e:
+        logger.error(f"Database error in get_leaderboard: {str(e)}")
+        if conn:
+            conn.rollback()
+        return jsonify({'error': 'Database error occurred'}), 500
+        
     except Exception as e:
+        logger.error(f"Error in get_leaderboard: {str(e)}")
         return jsonify({'error': str(e)}), 500
         
     finally:
-        if 'cur' in locals():
+        if cur:
             cur.close()
-        if 'conn' in locals():
+        if conn:
             conn.close()
 
 @submissions_bp.route('/api/predict', methods=['POST', 'OPTIONS'])
