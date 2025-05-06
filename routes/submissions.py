@@ -25,6 +25,9 @@ except Exception as e:
 # File to store submissions
 SUBMISSIONS_FILE = 'submissions.csv'
 
+# File to store game states
+GAME_STATES_FILE = 'game_states.csv'
+
 def ensure_submissions_file():
     """Ensure the submissions file exists with the correct columns"""
     if not os.path.exists(SUBMISSIONS_FILE):
@@ -77,6 +80,61 @@ def save_submission(submission_date, nickname, players, results, predicted_wins,
         logger.error(f"Error saving submission: {str(e)}")
         raise
 
+def ensure_game_states_file():
+    """Ensure the game states file exists with the correct columns"""
+    if not os.path.exists(GAME_STATES_FILE):
+        df = pd.DataFrame(columns=[
+            'date',
+            'player_stats'
+        ])
+        df.to_csv(GAME_STATES_FILE, index=False)
+        logger.info("Created new game states file")
+
+def save_game_state(date, player_stats):
+    """Save the current game state"""
+    try:
+        if not os.path.exists(GAME_STATES_FILE):
+            ensure_game_states_file()
+        
+        df = pd.read_csv(GAME_STATES_FILE)
+        
+        # Check if state already exists for this date
+        if len(df[df['date'] == date]) > 0:
+            return
+        
+        # Add new game state
+        new_row = pd.DataFrame([{
+            'date': date,
+            'player_stats': str(player_stats)  # Convert to string for CSV storage
+        }])
+        
+        df = pd.concat([df, new_row], ignore_index=True)
+        df.to_csv(GAME_STATES_FILE, index=False)
+        logger.info(f"Saved game state for {date}")
+        
+    except Exception as e:
+        logger.error(f"Error saving game state: {str(e)}")
+        raise
+
+def load_game_state(date):
+    """Load game state for a specific date"""
+    try:
+        if not os.path.exists(GAME_STATES_FILE):
+            return None
+            
+        df = pd.read_csv(GAME_STATES_FILE)
+        state = df[df['date'] == date]
+        
+        if state.empty:
+            return None
+            
+        # Convert string representation back to Python object
+        return eval(state.iloc[0]['player_stats'])
+        
+    except Exception as e:
+        logger.error(f"Error loading game state: {str(e)}")
+        return None
+
 @submissions_bp.route('/api/submit-team', methods=['POST'])
 def submit_team():
     try:
@@ -121,6 +179,10 @@ def submit_team():
             predicted_wins,
             team_stats
         )
+        
+        # Save the game state if it doesn't exist
+        if not os.path.exists(GAME_STATES_FILE) or len(pd.read_csv(GAME_STATES_FILE)[pd.read_csv(GAME_STATES_FILE)['date'] == today]) == 0:
+            save_game_state(today, data['players'])
         
         return jsonify({
             'message': 'Team submitted successfully',
@@ -217,4 +279,48 @@ def predict():
         return jsonify({'predicted_wins': predicted_wins})
     except Exception as e:
         logger.error(f"Error in predict: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@submissions_bp.route('/api/history', methods=['GET'])
+def get_history():
+    try:
+        # Get list of available dates
+        if not os.path.exists(GAME_STATES_FILE):
+            return jsonify({'dates': []}), 200
+            
+        df = pd.read_csv(GAME_STATES_FILE)
+        dates = df['date'].tolist()
+        
+        # Get user's submission history if nickname provided
+        nickname = request.args.get('nickname')
+        if nickname:
+            submissions_df = load_submissions()
+            user_submissions = submissions_df[submissions_df['nickname'] == nickname]
+            played_dates = user_submissions['submission_date'].unique().tolist()
+        else:
+            played_dates = []
+        
+        return jsonify({
+            'dates': dates,
+            'played_dates': played_dates
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@submissions_bp.route('/api/game-state/<date>', methods=['GET'])
+def get_game_state(date):
+    try:
+        state = load_game_state(date)
+        if state is None:
+            return jsonify({'error': 'Game state not found for this date'}), 404
+            
+        return jsonify({
+            'date': date,
+            'player_stats': state
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_game_state: {str(e)}")
         return jsonify({'error': str(e)}), 500 
