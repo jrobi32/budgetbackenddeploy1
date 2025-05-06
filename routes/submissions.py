@@ -81,12 +81,12 @@ def save_submission(submission_date, nickname, players, results, predicted_wins,
 def submit_team():
     try:
         data = request.get_json()
-<<<<<<< HEAD
-        required_fields = ['nickname', 'players', 'results']
         
         # Validate required fields
-        if not all(field in data for field in required_fields):
-            return jsonify({'error': 'Missing required fields'}), 400
+        required_fields = ['nickname', 'players', 'results']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
             
         # Check if nickname already exists for today
         today = datetime.now().strftime('%Y-%m-%d')
@@ -97,19 +97,6 @@ def submit_team():
             return jsonify({'error': 'Sorry, that name is already taken.'}), 409
 
         # Calculate team statistics
-=======
-        
-        # Validate required fields
-        required_fields = ['nickname', 'players', 'results']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Get current date in Eastern time
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        
-        # Calculate team statistics from the 5 selected players
->>>>>>> b927f88ca0206aa2f10b4944aee3ffedacb08006
         team_stats = {
             'points': sum(float(p['Points Per Game (Avg)']) for p in data['players']),
             'rebounds': sum(float(p['Rebounds Per Game (Avg)']) for p in data['players']),
@@ -122,7 +109,6 @@ def submit_team():
             'three_pct': sum(float(p['Three Point % (Avg)']) for p in data['players']) / len(data['players'])
         }
         
-<<<<<<< HEAD
         # Scale the features
         features = np.array([[
             team_stats['points'],
@@ -145,14 +131,6 @@ def submit_team():
         # Save the submission
         save_submission(
             today,
-=======
-        # Use the frontend's predicted wins
-        predicted_wins = data['results']['wins']
-        
-        # Save the submission
-        save_submission(
-            current_date,
->>>>>>> b927f88ca0206aa2f10b4944aee3ffedacb08006
             data['nickname'],
             data['players'],
             data['results'],
