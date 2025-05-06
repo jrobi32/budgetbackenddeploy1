@@ -6,6 +6,8 @@ import os
 import numpy as np
 import logging
 import joblib
+import time
+from psycopg2 import OperationalError
 
 submissions_bp = Blueprint('submissions', __name__)
 
@@ -22,22 +24,30 @@ except Exception as e:
     logger.error(f"Error loading model or scaler: {str(e)}")
     raise
 
-def get_db_connection():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
-            database=os.getenv('DB_NAME', 'budgetgm'),
-            user=os.getenv('DB_USER', 'budgetgm_user'),
-            password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
-            sslmode='verify-full',
-            sslrootcert='/etc/ssl/certs/ca-certificates.crt',
-            connect_timeout=10
-        )
-        logger.info("Successfully connected to database")
-        return conn
-    except Exception as e:
-        logger.error(f"Error connecting to database: {str(e)}")
-        raise
+def get_db_connection(max_retries=3, retry_delay=1):
+    """Get a database connection with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            conn = psycopg2.connect(
+                host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
+                database=os.getenv('DB_NAME', 'budgetgm'),
+                user=os.getenv('DB_USER', 'budgetgm_user'),
+                password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
+                sslmode='require',
+                connect_timeout=10
+            )
+            logger.info("Successfully connected to database")
+            return conn
+        except OperationalError as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Database connection attempt {attempt + 1} failed: {str(e)}")
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to connect to database after {max_retries} attempts: {str(e)}")
+                raise
+        except Exception as e:
+            logger.error(f"Unexpected error connecting to database: {str(e)}")
+            raise
 
 @submissions_bp.route('/api/submit-team', methods=['POST'])
 def submit_team():
