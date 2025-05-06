@@ -135,48 +135,5 @@ def simulate():
         'team_stats': team_stats
     })
 
-@app.route('/api/leaderboard', methods=['GET'])
-def get_leaderboard():
-    try:
-        # Get current date in Eastern time
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Get submissions for today, ordered by wins
-        cur.execute(
-            """
-            SELECT nickname, players, results
-            FROM submissions
-            WHERE submission_date = %s
-            ORDER BY (results->>'wins')::integer DESC
-            """,
-            (current_date,)
-        )
-        
-        submissions = []
-        for row in cur.fetchall():
-            submissions.append({
-                'nickname': row[0],
-                'players': row[1],
-                'results': row[2]
-            })
-        
-        return jsonify({
-            'date': current_date,
-            'submissions': submissions
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error in get_leaderboard: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-        
-    finally:
-        if 'cur' in locals():
-            cur.close()
-        if 'conn' in locals():
-            conn.close()
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
