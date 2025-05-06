@@ -197,7 +197,7 @@ def predict():
             'assists': sum(float(p['Assists Per Game (Avg)']) for p in selected_players),
             'steals': sum(float(p['Steals Per Game (Avg)']) for p in selected_players),
             'blocks': sum(float(p['Blocks Per Game (Avg)']) for p in selected_players),
-            'turnovers': sum(float(p['Turnovers Per Game (Avg)']) for p in selected_players),
+            'turnovers': sum(float(p['TOV']) for p in selected_players),
             'fg_pct': sum(float(p['Field Goal % (Avg)']) for p in selected_players) / len(selected_players),
             'ft_pct': sum(float(p['Free Throw % (Avg)']) for p in selected_players) / len(selected_players),
             'three_pct': sum(float(p['Three Point % (Avg)']) for p in selected_players) / len(selected_players)
