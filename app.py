@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import json
+import psycopg2
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +32,15 @@ CORS(app, resources={
         "max_age": 3600
     }
 })
+
+def get_db_connection():
+    conn = psycopg2.connect(
+        host=os.getenv('DB_HOST', 'localhost'),
+        database=os.getenv('DB_NAME', 'budgetgm'),
+        user=os.getenv('DB_USER', 'postgres'),
+        password=os.getenv('DB_PASSWORD', '')
+    )
+    return conn
 
 # Load the model and scaler
 try:
@@ -126,18 +137,46 @@ def simulate():
 
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
-    today = datetime.now().strftime('%Y-%m-%d')
-    if today not in submissions:
-        return jsonify([])
-    
-    # Sort submissions by predicted wins
-    sorted_submissions = sorted(submissions[today], key=lambda x: x['predicted_wins'], reverse=True)
-    
-    # Add rank to each submission
-    for i, submission in enumerate(sorted_submissions):
-        submission['rank'] = i + 1
-    
-    return jsonify(sorted_submissions)
+    try:
+        # Get current date in Eastern time
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get submissions for today, ordered by wins
+        cur.execute(
+            """
+            SELECT nickname, players, results
+            FROM submissions
+            WHERE submission_date = %s
+            ORDER BY (results->>'wins')::integer DESC
+            """,
+            (current_date,)
+        )
+        
+        submissions = []
+        for row in cur.fetchall():
+            submissions.append({
+                'nickname': row[0],
+                'players': row[1],
+                'results': row[2]
+            })
+        
+        return jsonify({
+            'date': current_date,
+            'submissions': submissions
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_leaderboard: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+        
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
