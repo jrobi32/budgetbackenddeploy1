@@ -1,6 +1,5 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import joblib
 import logging
 from routes.players import players_bp
 from routes.submissions import submissions_bp
@@ -32,15 +31,6 @@ CORS(app, resources={
     }
 })
 
-# Load the model and scaler
-try:
-    model = joblib.load('best_model.joblib')
-    scaler = joblib.load('scaler.joblib')
-    logger.info("Successfully loaded model and scaler")
-except Exception as e:
-    logger.error(f"Error loading model or scaler: {str(e)}")
-    raise
-
 # Load player data
 players_df = pd.read_csv('nba_players_final_updated.csv')
 
@@ -51,10 +41,6 @@ app.register_blueprint(submissions_bp)
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy'}), 200
-
-@app.route('/api/players', methods=['GET'])
-def get_players():
-    return jsonify(players_df.to_dict('records'))
 
 @app.route('/api/simulate', methods=['POST'])
 def simulate():
@@ -90,22 +76,7 @@ def simulate():
         'pie': sum(p['Player Impact Estimate (Avg)'] for p in player_data) / 5
     }
     
-    # Scale the features
-    features = np.array([[
-        team_stats['points'], team_stats['rebounds'], team_stats['assists'],
-        team_stats['steals'], team_stats['blocks'], team_stats['turnovers'],
-        team_stats['fg_pct'], team_stats['ft_pct'], team_stats['three_pct'],
-        team_stats['plus_minus'], team_stats['off_rating'], team_stats['def_rating'],
-        team_stats['net_rating'], team_stats['usage'], team_stats['pie']
-    ]])
-    scaled_features = scaler.transform(features)
-    
-    # Make prediction
-    predicted_wins = model.predict(scaled_features)[0]
-    predicted_wins = max(8, min(74, predicted_wins))  # Keep within reasonable bounds
-    
     return jsonify({
-        'predicted_wins': float(predicted_wins),
         'team_stats': team_stats
     })
 

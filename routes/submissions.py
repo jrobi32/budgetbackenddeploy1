@@ -33,14 +33,26 @@ def init_connection_pool():
     global connection_pool
     if connection_pool is None:
         try:
+            # Get database configuration from environment variables
+            db_config = {
+                'host': os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
+                'database': os.getenv('DB_NAME', 'budgetgm'),
+                'user': os.getenv('DB_USER', 'budgetgm_user'),
+                'password': os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
+                'sslmode': 'disable',  # Disable SSL for now to test connection
+                'connect_timeout': 10
+            }
+            
+            # Try to create a test connection first
+            test_conn = psycopg2.connect(**db_config)
+            test_conn.close()
+            logger.info("Successfully tested database connection")
+            
+            # Create the connection pool
             connection_pool = pool.SimpleConnectionPool(
                 minconn=1,
                 maxconn=10,
-                host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
-                database=os.getenv('DB_NAME', 'budgetgm'),
-                user=os.getenv('DB_USER', 'budgetgm_user'),
-                password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
-                sslmode='prefer'
+                **db_config
             )
             logger.info("Successfully created connection pool")
         except Exception as e:
