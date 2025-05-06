@@ -98,7 +98,7 @@ def submit_team():
             'assists': sum(float(p['Assists Per Game (Avg)']) for p in data['players']),
             'steals': sum(float(p['Steals Per Game (Avg)']) for p in data['players']),
             'blocks': sum(float(p['Blocks Per Game (Avg)']) for p in data['players']),
-            'turnovers': sum(float(p['Turnovers Per Game (Avg)']) for p in data['players']),
+            'turnovers': sum(float(p['TOV']) for p in data['players']),
             'fg_pct': sum(float(p['Field Goal % (Avg)']) for p in data['players']) / len(data['players']),
             'ft_pct': sum(float(p['Free Throw % (Avg)']) for p in data['players']) / len(data['players']),
             'three_pct': sum(float(p['Three Point % (Avg)']) for p in data['players']) / len(data['players'])
