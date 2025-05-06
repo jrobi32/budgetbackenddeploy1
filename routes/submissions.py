@@ -109,24 +109,8 @@ def submit_team():
             'three_pct': sum(float(p['Three Point % (Avg)']) for p in data['players']) / len(data['players'])
         }
         
-        # Scale the features
-        features = np.array([[
-            team_stats['points'],
-            team_stats['rebounds'],
-            team_stats['assists'],
-            team_stats['steals'],
-            team_stats['blocks'],
-            team_stats['turnovers'],
-            team_stats['fg_pct'],
-            team_stats['ft_pct'],
-            team_stats['three_pct']
-        ]])
-        
-        scaled_features = scaler.transform(features)
-        
-        # Make prediction
-        predicted_wins = model.predict(scaled_features)[0]
-        predicted_wins = max(0, min(74, predicted_wins))  # Keep range at 0-74
+        # Use the frontend's predicted wins
+        predicted_wins = data['results']['wins']
         
         # Save the submission
         save_submission(
