@@ -67,13 +67,7 @@ def simulate():
         'turnovers': sum(p['Turnovers Per Game (Avg)'] for p in player_data),
         'fg_pct': sum(p['Field Goal % (Avg)'] for p in player_data) / 5,
         'ft_pct': sum(p['Free Throw % (Avg)'] for p in player_data) / 5,
-        'three_pct': sum(p['Three Point % (Avg)'] for p in player_data) / 5,
-        'plus_minus': sum(p['Plus Minus (Avg)'] for p in player_data) / 5,
-        'off_rating': sum(p['Offensive Rating (Avg)'] for p in player_data) / 5,
-        'def_rating': sum(p['Defensive Rating (Avg)'] for p in player_data) / 5,
-        'net_rating': sum(p['Net Rating (Avg)'] for p in player_data) / 5,
-        'usage': sum(p['Usage % (Avg)'] for p in player_data) / 5,
-        'pie': sum(p['Player Impact Estimate (Avg)'] for p in player_data) / 5
+        'three_pct': sum(p['Three Point % (Avg)'] for p in player_data) / 5
     }
     
     return jsonify({
