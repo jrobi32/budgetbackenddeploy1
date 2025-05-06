@@ -28,7 +28,8 @@ def get_db_connection():
             host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
             database=os.getenv('DB_NAME', 'budgetgm'),
             user=os.getenv('DB_USER', 'budgetgm_user'),
-            password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx')
+            password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
+            sslmode='require'  # Enable SSL
         )
         return conn
     except Exception as e:
