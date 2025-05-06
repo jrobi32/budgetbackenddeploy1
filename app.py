@@ -8,7 +8,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import json
-import psycopg2
 import os
 
 # Configure logging
@@ -33,15 +32,6 @@ CORS(app, resources={
     }
 })
 
-def get_db_connection():
-    conn = psycopg2.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        database=os.getenv('DB_NAME', 'budgetgm'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD', '')
-    )
-    return conn
-
 # Load the model and scaler
 try:
     model = joblib.load('best_model.joblib')
@@ -53,9 +43,6 @@ except Exception as e:
 
 # Load player data
 players_df = pd.read_csv('nba_players_final_updated.csv')
-
-# Store submissions in memory (in production, use a database)
-submissions = {}
 
 # Register blueprints
 app.register_blueprint(players_bp)
@@ -116,19 +103,6 @@ def simulate():
     # Make prediction
     predicted_wins = model.predict(scaled_features)[0]
     predicted_wins = max(8, min(74, predicted_wins))  # Keep within reasonable bounds
-    
-    # Store submission
-    today = datetime.now().strftime('%Y-%m-%d')
-    if today not in submissions:
-        submissions[today] = []
-    
-    submission = {
-        'nickname': nickname,
-        'players': [{'id': p['id'], 'name': p['name'], 'value': p['value']} for p in players],
-        'predicted_wins': float(predicted_wins),
-        'timestamp': datetime.now().isoformat()
-    }
-    submissions[today].append(submission)
     
     return jsonify({
         'predicted_wins': float(predicted_wins),
