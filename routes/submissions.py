@@ -25,25 +25,33 @@ except Exception as e:
     logger.error(f"Error loading model or scaler: {str(e)}")
     raise
 
-# Initialize connection pool
-try:
-    connection_pool = pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
-        database=os.getenv('DB_NAME', 'budgetgm'),
-        user=os.getenv('DB_USER', 'budgetgm_user'),
-        password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
-        sslmode='prefer'
-    )
-    logger.info("Successfully created connection pool")
-except Exception as e:
-    logger.error(f"Error creating connection pool: {str(e)}")
-    raise
+# Initialize connection pool as None
+connection_pool = None
+
+def init_connection_pool():
+    """Initialize the connection pool if it hasn't been created yet"""
+    global connection_pool
+    if connection_pool is None:
+        try:
+            connection_pool = pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                host=os.getenv('DB_HOST', 'dpg-d07hog3uibrs73fg9c20-a.oregon-postgres.render.com'),
+                database=os.getenv('DB_NAME', 'budgetgm'),
+                user=os.getenv('DB_USER', 'budgetgm_user'),
+                password=os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
+                sslmode='prefer'
+            )
+            logger.info("Successfully created connection pool")
+        except Exception as e:
+            logger.error(f"Error creating connection pool: {str(e)}")
+            raise
 
 def get_db_connection():
     """Get a connection from the pool"""
     try:
+        if connection_pool is None:
+            init_connection_pool()
         conn = connection_pool.getconn()
         logger.info("Successfully got connection from pool")
         return conn
@@ -54,8 +62,9 @@ def get_db_connection():
 def release_db_connection(conn):
     """Release a connection back to the pool"""
     try:
-        connection_pool.putconn(conn)
-        logger.info("Successfully released connection back to pool")
+        if connection_pool is not None:
+            connection_pool.putconn(conn)
+            logger.info("Successfully released connection back to pool")
     except Exception as e:
         logger.error(f"Error releasing connection to pool: {str(e)}")
 
