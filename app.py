@@ -1,9 +1,13 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import joblib
 import logging
 from routes.players import players_bp
 from routes.submissions import submissions_bp
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +40,12 @@ except Exception as e:
     logger.error(f"Error loading model or scaler: {str(e)}")
     raise
 
+# Load player data
+players_df = pd.read_csv('nba_players_final_updated.csv')
+
+# Store submissions in memory (in production, use a database)
+submissions = {}
+
 # Register blueprints
 app.register_blueprint(players_bp)
 app.register_blueprint(submissions_bp)
@@ -43,6 +53,91 @@ app.register_blueprint(submissions_bp)
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy'}), 200
+
+@app.route('/api/players', methods=['GET'])
+def get_players():
+    return jsonify(players_df.to_dict('records'))
+
+@app.route('/api/simulate', methods=['POST'])
+def simulate():
+    data = request.json
+    players = data.get('players', [])
+    nickname = data.get('nickname', '')
+    
+    if not players or len(players) != 5:
+        return jsonify({'error': 'Invalid team size'}), 400
+    
+    # Get player data
+    player_data = []
+    for player in players:
+        player_row = players_df[players_df['Player ID'] == player['id']].iloc[0]
+        player_data.append(player_row)
+    
+    # Calculate team stats
+    team_stats = {
+        'points': sum(p['Points Per Game (Avg)'] for p in player_data),
+        'rebounds': sum(p['Rebounds Per Game (Avg)'] for p in player_data),
+        'assists': sum(p['Assists Per Game (Avg)'] for p in player_data),
+        'steals': sum(p['Steals Per Game (Avg)'] for p in player_data),
+        'blocks': sum(p['Blocks Per Game (Avg)'] for p in player_data),
+        'turnovers': sum(p['Turnovers Per Game (Avg)'] for p in player_data),
+        'fg_pct': sum(p['Field Goal % (Avg)'] for p in player_data) / 5,
+        'ft_pct': sum(p['Free Throw % (Avg)'] for p in player_data) / 5,
+        'three_pct': sum(p['Three Point % (Avg)'] for p in player_data) / 5,
+        'plus_minus': sum(p['Plus Minus (Avg)'] for p in player_data) / 5,
+        'off_rating': sum(p['Offensive Rating (Avg)'] for p in player_data) / 5,
+        'def_rating': sum(p['Defensive Rating (Avg)'] for p in player_data) / 5,
+        'net_rating': sum(p['Net Rating (Avg)'] for p in player_data) / 5,
+        'usage': sum(p['Usage % (Avg)'] for p in player_data) / 5,
+        'pie': sum(p['Player Impact Estimate (Avg)'] for p in player_data) / 5
+    }
+    
+    # Scale the features
+    features = np.array([[
+        team_stats['points'], team_stats['rebounds'], team_stats['assists'],
+        team_stats['steals'], team_stats['blocks'], team_stats['turnovers'],
+        team_stats['fg_pct'], team_stats['ft_pct'], team_stats['three_pct'],
+        team_stats['plus_minus'], team_stats['off_rating'], team_stats['def_rating'],
+        team_stats['net_rating'], team_stats['usage'], team_stats['pie']
+    ]])
+    scaled_features = scaler.transform(features)
+    
+    # Make prediction
+    predicted_wins = model.predict(scaled_features)[0]
+    predicted_wins = max(8, min(74, predicted_wins))  # Keep within reasonable bounds
+    
+    # Store submission
+    today = datetime.now().strftime('%Y-%m-%d')
+    if today not in submissions:
+        submissions[today] = []
+    
+    submission = {
+        'nickname': nickname,
+        'players': [{'id': p['id'], 'name': p['name'], 'value': p['value']} for p in players],
+        'predicted_wins': float(predicted_wins),
+        'timestamp': datetime.now().isoformat()
+    }
+    submissions[today].append(submission)
+    
+    return jsonify({
+        'predicted_wins': float(predicted_wins),
+        'team_stats': team_stats
+    })
+
+@app.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard():
+    today = datetime.now().strftime('%Y-%m-%d')
+    if today not in submissions:
+        return jsonify([])
+    
+    # Sort submissions by predicted wins
+    sorted_submissions = sorted(submissions[today], key=lambda x: x['predicted_wins'], reverse=True)
+    
+    # Add rank to each submission
+    for i, submission in enumerate(sorted_submissions):
+        submission['rank'] = i + 1
+    
+    return jsonify(sorted_submissions)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
