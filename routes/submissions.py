@@ -39,7 +39,7 @@ def init_connection_pool():
                 'database': os.getenv('DB_NAME', 'budgetgm'),
                 'user': os.getenv('DB_USER', 'budgetgm_user'),
                 'password': os.getenv('DB_PASSWORD', 'aqXhpXpEGGBmI5WvgG8YqPbqEBKRBqSx'),
-                'sslmode': 'disable',  # Disable SSL for now to test connection
+                'sslmode': 'require',  # Require SSL
                 'connect_timeout': 10
             }
             
