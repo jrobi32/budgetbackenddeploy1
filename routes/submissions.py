@@ -214,10 +214,14 @@ def submit_team():
 @submissions_bp.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
     try:
-        # Get current date in Eastern time
-        eastern = pytz.timezone('US/Eastern')
-        current_time = datetime.now(eastern)
-        date = current_time.strftime('%Y-%m-%d')
+        # Get date from query parameter or use current date
+        date = request.args.get('date')
+        if not date:
+            # Get current date in Eastern time
+            eastern = pytz.timezone('US/Eastern')
+            current_time = datetime.now(eastern)
+            date = current_time.strftime('%Y-%m-%d')
+        
         logger.info(f"Fetching leaderboard for date: {date}")
         
         # Load submissions
