@@ -110,15 +110,19 @@ def save_game_state(date, player_stats):
             logger.info(f"Game state already exists for {date}")
             return
         
+        # Convert player_stats to string if it's not already
+        if not isinstance(player_stats, str):
+            player_stats = json.dumps(player_stats)
+        
         # Add new game state
         new_row = pd.DataFrame([{
             'date': date,
-            'player_stats': str(player_stats)  # Convert to string for CSV storage
+            'player_stats': player_stats
         }])
         
         df = pd.concat([df, new_row], ignore_index=True)
         df.to_csv(GAME_STATES_FILE, index=False)
-        logger.info(f"Saved game state for {date}")
+        logger.info(f"Saved game state for {date} with {len(eval(player_stats))} players")
         
     except Exception as e:
         logger.error(f"Error saving game state: {str(e)}")
@@ -139,7 +143,9 @@ def load_game_state(date):
             return None
             
         # Convert string representation back to Python object
-        return eval(state.iloc[0]['player_stats'])
+        player_stats = eval(state.iloc[0]['player_stats'])
+        logger.info(f"Loaded game state for {date} with {len(player_stats)} players")
+        return player_stats
         
     except Exception as e:
         logger.error(f"Error loading game state: {str(e)}")
