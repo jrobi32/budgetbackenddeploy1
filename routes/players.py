@@ -71,6 +71,12 @@ def generate_daily_pool():
         try:
             with open(DAILY_POOL_FILE, 'w') as f:
                 json.dump(pool_data, f)
+                
+            # Save the game state for this date
+            from routes.submissions import save_game_state
+            save_game_state(current_time.strftime('%Y-%m-%d'), pool)
+            logger.info(f"Saved game state for {current_time.strftime('%Y-%m-%d')}")
+            
         except Exception as e:
             logger.error(f"Error saving daily pool: {str(e)}")
             # Continue even if saving fails
