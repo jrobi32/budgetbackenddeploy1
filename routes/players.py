@@ -23,12 +23,6 @@ def generate_daily_pool():
         current_time = datetime.now(eastern)
         logger.info(f"Current time: {current_time}")
         
-        # Set reset time to 5 minutes from current time
-        reset_hour = current_time.hour
-        reset_minute = (current_time.minute + 5) % 60
-        if current_time.minute + 5 >= 60:
-            reset_hour = (reset_hour + 1) % 24
-        
         # Check if we need to generate a new pool
         if os.path.exists(DAILY_POOL_FILE):
             try:
@@ -37,7 +31,21 @@ def generate_daily_pool():
                     last_generated = datetime.fromisoformat(pool_data['last_generated'])
                     last_generated = eastern.localize(last_generated.replace(tzinfo=None))
                     
-                    # Check if it's time for a new pool (current time is past reset time)
+                    # If reset_time is not set, set it to 5 minutes from now
+                    if 'reset_time' not in pool_data:
+                        reset_hour = current_time.hour
+                        reset_minute = (current_time.minute + 5) % 60
+                        if current_time.minute + 5 >= 60:
+                            reset_hour = (reset_hour + 1) % 24
+                        pool_data['reset_time'] = f"{reset_hour:02d}:{reset_minute:02d}"
+                        logger.info(f"Setting reset time to {pool_data['reset_time']}")
+                        with open(DAILY_POOL_FILE, 'w') as f:
+                            json.dump(pool_data, f)
+                    
+                    # Parse the stored reset time
+                    reset_hour, reset_minute = map(int, pool_data['reset_time'].split(':'))
+                    
+                    # Check if it's time for a new pool
                     if (current_time.hour > reset_hour or 
                         (current_time.hour == reset_hour and current_time.minute >= reset_minute)):
                         # Save current pool as yesterday's game state before generating new pool
@@ -50,7 +58,7 @@ def generate_daily_pool():
                         logger.info("Forcing new pool generation")
                         raise Exception("Force new pool generation")
                     else:
-                        logger.info(f"Using existing pool, next reset at {reset_hour:02d}:{reset_minute:02d}")
+                        logger.info(f"Using existing pool, next reset at {pool_data['reset_time']}")
                         return pool_data['players']
                     
             except Exception as e:
@@ -81,9 +89,17 @@ def generate_daily_pool():
             for _, player in selected_players.iterrows():
                 pool.append(player.to_dict())
         
+        # Calculate reset time if not already set
+        reset_hour = current_time.hour
+        reset_minute = (current_time.minute + 5) % 60
+        if current_time.minute + 5 >= 60:
+            reset_hour = (reset_hour + 1) % 24
+        reset_time = f"{reset_hour:02d}:{reset_minute:02d}"
+        
         # Save the new pool
         pool_data = {
             'last_generated': current_time.isoformat(),
+            'reset_time': reset_time,
             'players': pool
         }
         
