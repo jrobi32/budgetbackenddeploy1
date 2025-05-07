@@ -83,13 +83,19 @@ def save_submission(submission_date, nickname, players, results, predicted_wins,
 
 def ensure_game_states_file():
     """Ensure the game states file exists with the correct columns"""
-    if not os.path.exists(GAME_STATES_FILE):
-        df = pd.DataFrame(columns=[
-            'date',
-            'player_stats'
-        ])
-        df.to_csv(GAME_STATES_FILE, index=False)
-        logger.info("Created new game states file")
+    try:
+        if not os.path.exists(GAME_STATES_FILE):
+            df = pd.DataFrame(columns=[
+                'date',
+                'player_stats'
+            ])
+            df.to_csv(GAME_STATES_FILE, index=False)
+            logger.info("Created new game states file")
+            # Ensure file permissions are set correctly
+            os.chmod(GAME_STATES_FILE, 0o666)
+    except Exception as e:
+        logger.error(f"Error creating game states file: {str(e)}")
+        raise
 
 def save_game_state(date, player_stats):
     """Save the current game state"""
@@ -101,6 +107,7 @@ def save_game_state(date, player_stats):
         
         # Check if state already exists for this date
         if len(df[df['date'] == date]) > 0:
+            logger.info(f"Game state already exists for {date}")
             return
         
         # Add new game state
@@ -121,12 +128,14 @@ def load_game_state(date):
     """Load game state for a specific date"""
     try:
         if not os.path.exists(GAME_STATES_FILE):
+            logger.warning(f"Game states file not found: {GAME_STATES_FILE}")
             return None
             
         df = pd.read_csv(GAME_STATES_FILE)
         state = df[df['date'] == date]
         
         if state.empty:
+            logger.warning(f"No game state found for date: {date}")
             return None
             
         # Convert string representation back to Python object
@@ -293,10 +302,12 @@ def get_history():
     try:
         # Get list of available dates
         if not os.path.exists(GAME_STATES_FILE):
+            logger.warning(f"Game states file not found: {GAME_STATES_FILE}")
             return jsonify({'dates': []}), 200
             
         df = pd.read_csv(GAME_STATES_FILE)
         dates = df['date'].tolist()
+        logger.info(f"Found {len(dates)} available dates")
         
         # Get user's submission history if nickname provided
         nickname = request.args.get('nickname')
@@ -304,6 +315,7 @@ def get_history():
             submissions_df = load_submissions()
             user_submissions = submissions_df[submissions_df['nickname'] == nickname]
             played_dates = user_submissions['submission_date'].unique().tolist()
+            logger.info(f"Found {len(played_dates)} played dates for user {nickname}")
         else:
             played_dates = []
         
