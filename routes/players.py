@@ -29,6 +29,9 @@ def generate_daily_pool():
                 with open(DAILY_POOL_FILE, 'r') as f:
                     pool_data = json.load(f)
                     last_generated = datetime.fromisoformat(pool_data['last_generated'])
+                    last_generated = eastern.localize(last_generated.replace(tzinfo=None))
+                    
+                    # Only generate new pool if it's a new day in Eastern time
                     if last_generated.date() == current_time.date():
                         logger.info("Using existing daily pool")
                         return pool_data['players']

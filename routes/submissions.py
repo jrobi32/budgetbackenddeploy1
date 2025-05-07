@@ -6,6 +6,7 @@ import logging
 import joblib
 import os
 import json
+import pytz
 
 submissions_bp = Blueprint('submissions', __name__)
 
@@ -146,13 +147,17 @@ def submit_team():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
             
-        # Check if nickname already exists for today
-        today = datetime.now().strftime('%Y-%m-%d')
+        # Get current date in Eastern time
+        eastern = pytz.timezone('US/Eastern')
+        current_time = datetime.now(eastern)
+        today = current_time.strftime('%Y-%m-%d')
+        
+        # Check if user already submitted today
         df = load_submissions()
         existing_submission = df[(df['submission_date'] == today) & (df['nickname'] == data['nickname'])]
         
         if not existing_submission.empty:
-            return jsonify({'error': 'Sorry, that name is already taken.'}), 409
+            return jsonify({'error': 'You have already submitted a team today.'}), 409
 
         # Calculate team statistics
         team_stats = {
@@ -200,8 +205,10 @@ def submit_team():
 @submissions_bp.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
     try:
-        # Get date from query parameter or use current date
-        date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+        # Get current date in Eastern time
+        eastern = pytz.timezone('US/Eastern')
+        current_time = datetime.now(eastern)
+        date = current_time.strftime('%Y-%m-%d')
         logger.info(f"Fetching leaderboard for date: {date}")
         
         # Load submissions
