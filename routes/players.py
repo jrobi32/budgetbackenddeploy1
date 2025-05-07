@@ -31,13 +31,20 @@ def generate_daily_pool():
                     last_generated = datetime.fromisoformat(pool_data['last_generated'])
                     last_generated = eastern.localize(last_generated.replace(tzinfo=None))
                     
-                    # Only generate new pool if it's a new day in Eastern time
-                    if last_generated.date() == current_time.date():
-                        logger.info("Using existing daily pool")
-                        return pool_data['players']
+                    # Save current pool as yesterday's game state before generating new pool
+                    from routes.submissions import save_game_state
+                    yesterday = (current_time - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+                    save_game_state(yesterday, pool_data['players'])
+                    logger.info(f"Saved current pool as game state for {yesterday}")
+                    
+                    # Force new pool generation
+                    logger.info("Forcing new pool generation")
+                    raise Exception("Force new pool generation")
+                    
             except Exception as e:
-                logger.error(f"Error reading daily pool file: {str(e)}")
-                # Continue to generate new pool if reading fails
+                if "Force new pool generation" not in str(e):
+                    logger.error(f"Error reading daily pool file: {str(e)}")
+                # Continue to generate new pool
         
         logger.info("Generating new daily pool")
         pool = []
