@@ -18,10 +18,16 @@ DAILY_POOL_FILE = 'daily_pool.json'
 
 def generate_daily_pool():
     try:
-        # Get current date in Eastern time
+        # Get current date and time in Eastern time
         eastern = pytz.timezone('US/Eastern')
         current_time = datetime.now(eastern)
         logger.info(f"Current time: {current_time}")
+        
+        # Set reset time to 5 minutes from current time
+        reset_hour = current_time.hour
+        reset_minute = (current_time.minute + 5) % 60
+        if current_time.minute + 5 >= 60:
+            reset_hour = (reset_hour + 1) % 24
         
         # Check if we need to generate a new pool
         if os.path.exists(DAILY_POOL_FILE):
@@ -31,15 +37,21 @@ def generate_daily_pool():
                     last_generated = datetime.fromisoformat(pool_data['last_generated'])
                     last_generated = eastern.localize(last_generated.replace(tzinfo=None))
                     
-                    # Save current pool as yesterday's game state before generating new pool
-                    from routes.submissions import save_game_state
-                    yesterday = (current_time - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-                    save_game_state(yesterday, pool_data['players'])
-                    logger.info(f"Saved current pool as game state for {yesterday}")
-                    
-                    # Force new pool generation
-                    logger.info("Forcing new pool generation")
-                    raise Exception("Force new pool generation")
+                    # Check if it's time for a new pool (current time is past reset time)
+                    if (current_time.hour > reset_hour or 
+                        (current_time.hour == reset_hour and current_time.minute >= reset_minute)):
+                        # Save current pool as yesterday's game state before generating new pool
+                        from routes.submissions import save_game_state
+                        yesterday = (current_time - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+                        save_game_state(yesterday, pool_data['players'])
+                        logger.info(f"Saved current pool as game state for {yesterday}")
+                        
+                        # Force new pool generation
+                        logger.info("Forcing new pool generation")
+                        raise Exception("Force new pool generation")
+                    else:
+                        logger.info(f"Using existing pool, next reset at {reset_hour:02d}:{reset_minute:02d}")
+                        return pool_data['players']
                     
             except Exception as e:
                 if "Force new pool generation" not in str(e):
