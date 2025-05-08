@@ -14,23 +14,26 @@ submissions_bp = Blueprint('submissions', __name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load the model and scaler
-try:
-    model = joblib.load('best_model.joblib')
-    scaler = joblib.load('scaler.joblib')
-    logger.info("Successfully loaded model and scaler")
-except Exception as e:
-    logger.error(f"Error loading model or scaler: {str(e)}")
-    raise
-
-# File to store submissions
-SUBMISSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'submissions.json')
+# File to store submissions - use a directory that persists on Render
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+SUBMISSIONS_FILE = os.path.join(DATA_DIR, 'submissions.json')
 
 # File to store game states
 GAME_STATES_FILE = 'game_states.csv'
 
+def ensure_data_directory():
+    """Ensure the data directory exists."""
+    if not os.path.exists(DATA_DIR):
+        try:
+            os.makedirs(DATA_DIR)
+            logger.info(f"Created data directory: {DATA_DIR}")
+        except Exception as e:
+            logger.error(f"Error creating data directory: {str(e)}")
+            raise
+
 def ensure_submissions_file():
     """Ensure the submissions file exists."""
+    ensure_data_directory()
     if not os.path.exists(SUBMISSIONS_FILE):
         try:
             with open(SUBMISSIONS_FILE, 'w') as f:
@@ -47,9 +50,11 @@ def load_submissions():
     ensure_submissions_file()
     try:
         with open(SUBMISSIONS_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+            logger.info(f"Loaded {sum(len(submissions) for submissions in data.values())} total submissions")
+            return data
     except Exception as e:
-        print(f"Error loading submissions: {e}")
+        logger.error(f"Error loading submissions: {str(e)}")
         return {}
 
 def save_submissions(submissions):
@@ -57,8 +62,10 @@ def save_submissions(submissions):
     try:
         with open(SUBMISSIONS_FILE, 'w') as f:
             json.dump(submissions, f, indent=2)
+        logger.info(f"Saved {sum(len(submissions) for submissions in submissions.values())} total submissions")
     except Exception as e:
-        print(f"Error saving submissions: {e}")
+        logger.error(f"Error saving submissions: {str(e)}")
+        raise
 
 def get_current_date():
     """Get current date in Eastern time."""
@@ -71,7 +78,9 @@ def get_submissions_for_date(date=None):
         date = get_current_date()
     
     submissions = load_submissions()
-    return submissions.get(date, [])
+    date_submissions = submissions.get(date, [])
+    logger.info(f"Found {len(date_submissions)} submissions for date {date}")
+    return date_submissions
 
 def add_submission(nickname, players, results):
     """Add a new submission for the current date."""
@@ -94,8 +103,13 @@ def add_submission(nickname, players, results):
         'timestamp': datetime.now(pytz.timezone('US/Eastern')).isoformat()
     })
     
-    save_submissions(submissions)
-    return True, "Submission successful"
+    try:
+        save_submissions(submissions)
+        logger.info(f"Added submission for {nickname} on {date}")
+        return True, "Submission successful"
+    except Exception as e:
+        logger.error(f"Error saving submission: {str(e)}")
+        return False, "Error saving submission"
 
 def get_leaderboard(date=None):
     """Get leaderboard for a specific date."""
@@ -106,6 +120,7 @@ def get_leaderboard(date=None):
     
     # Sort by wins
     sorted_submissions = sorted(submissions, key=lambda x: x['results']['wins'], reverse=True)
+    logger.info(f"Generated leaderboard for {date} with {len(sorted_submissions)} submissions")
     
     return {
         'date': date,
@@ -382,5 +397,6 @@ def get_game_state(date):
         logger.error(f"Error in get_game_state: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# Initialize submissions file when module is imported
+# Initialize data directory and submissions file when module is imported
+ensure_data_directory()
 ensure_submissions_file() 
