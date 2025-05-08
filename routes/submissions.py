@@ -213,7 +213,9 @@ def submit_team():
         existing_submission = get_submissions_for_date(today)
         
         if existing_submission:
-            return jsonify({'error': 'You have already submitted a team today.'}), 409
+            for submission in existing_submission:
+                if submission['nickname'] == data['nickname']:
+                    return jsonify({'error': 'You have already submitted a team today.'}), 409
 
         # Calculate team statistics
         team_stats = {
@@ -231,12 +233,18 @@ def submit_team():
         # Use the frontend's predicted wins
         predicted_wins = data['results']['wins']
         
-        # Save the submission
-        add_submission(
+        # Save the submission with the predicted wins
+        success, message = add_submission(
             data['nickname'],
             data['players'],
-            data['results']
+            {
+                'wins': predicted_wins,
+                'losses': 82 - predicted_wins
+            }
         )
+        
+        if not success:
+            return jsonify({'error': message}), 409
         
         # Save the game state if it doesn't exist
         if not os.path.exists(GAME_STATES_FILE) or len(pd.read_csv(GAME_STATES_FILE)[pd.read_csv(GAME_STATES_FILE)['date'] == today]) == 0:
