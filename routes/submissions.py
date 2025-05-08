@@ -24,62 +24,103 @@ except Exception as e:
     raise
 
 # File to store submissions
-SUBMISSIONS_FILE = 'submissions.csv'
+SUBMISSIONS_FILE = 'submissions.json'
 
 # File to store game states
 GAME_STATES_FILE = 'game_states.csv'
 
 def ensure_submissions_file():
-    """Ensure the submissions file exists with the correct columns"""
+    """Ensure the submissions file exists."""
     if not os.path.exists(SUBMISSIONS_FILE):
-        df = pd.DataFrame(columns=[
-            'submission_date', 'nickname', 'players', 'results',
-            'predicted_wins', 'team_stats'
-        ])
-        df.to_csv(SUBMISSIONS_FILE, index=False)
-        logger.info("Created new submissions file")
+        with open(SUBMISSIONS_FILE, 'w') as f:
+            json.dump({}, f)
+        print(f"Created new submissions file: {SUBMISSIONS_FILE}")
 
 def load_submissions():
-    """Load submissions from CSV file"""
+    """Load all submissions from the file."""
+    ensure_submissions_file()
     try:
-        if not os.path.exists(SUBMISSIONS_FILE):
-            ensure_submissions_file()
-        df = pd.read_csv(SUBMISSIONS_FILE)
-        # Convert string representations back to Python objects
-        df['players'] = df['players'].apply(eval)
-        df['results'] = df['results'].apply(eval)
-        df['team_stats'] = df['team_stats'].apply(eval)
-        return df
+        with open(SUBMISSIONS_FILE, 'r') as f:
+            return json.load(f)
     except Exception as e:
-        logger.error(f"Error loading submissions: {str(e)}")
-        raise
+        print(f"Error loading submissions: {e}")
+        return {}
 
-def save_submission(submission_date, nickname, players, results, predicted_wins, team_stats):
-    """Save a new submission to the CSV file"""
+def save_submissions(submissions):
+    """Save all submissions to the file."""
     try:
-        df = load_submissions()
-        
-        # Check if user already submitted today
-        if len(df[(df['submission_date'] == submission_date) & (df['nickname'] == nickname)]) > 0:
-            raise ValueError("You have already submitted a team today")
-        
-        # Add new submission
-        new_row = pd.DataFrame([{
-            'submission_date': submission_date,
-            'nickname': nickname,
-            'players': str(players),  # Convert to string for CSV storage
-            'results': str(results),
-            'predicted_wins': predicted_wins,
-            'team_stats': str(team_stats)
-        }])
-        
-        df = pd.concat([df, new_row], ignore_index=True)
-        df.to_csv(SUBMISSIONS_FILE, index=False)
-        logger.info(f"Saved submission for {nickname} on {submission_date}")
-        
+        with open(SUBMISSIONS_FILE, 'w') as f:
+            json.dump(submissions, f, indent=2)
     except Exception as e:
-        logger.error(f"Error saving submission: {str(e)}")
-        raise
+        print(f"Error saving submissions: {e}")
+
+def get_current_date():
+    """Get current date in Eastern time."""
+    eastern = pytz.timezone('US/Eastern')
+    return datetime.now(eastern).strftime('%Y-%m-%d')
+
+def get_submissions_for_date(date=None):
+    """Get submissions for a specific date."""
+    if date is None:
+        date = get_current_date()
+    
+    submissions = load_submissions()
+    return submissions.get(date, [])
+
+def add_submission(nickname, players, results):
+    """Add a new submission for the current date."""
+    date = get_current_date()
+    submissions = load_submissions()
+    
+    if date not in submissions:
+        submissions[date] = []
+    
+    # Check if user already submitted for today
+    for submission in submissions[date]:
+        if submission['nickname'] == nickname:
+            return False, "You have already submitted a team for today"
+    
+    # Add new submission
+    submissions[date].append({
+        'nickname': nickname,
+        'players': players,
+        'results': results,
+        'timestamp': datetime.now(pytz.timezone('US/Eastern')).isoformat()
+    })
+    
+    save_submissions(submissions)
+    return True, "Submission successful"
+
+def get_leaderboard(date=None):
+    """Get leaderboard for a specific date."""
+    if date is None:
+        date = get_current_date()
+    
+    submissions = get_submissions_for_date(date)
+    
+    # Sort by wins
+    sorted_submissions = sorted(submissions, key=lambda x: x['results']['wins'], reverse=True)
+    
+    return {
+        'date': date,
+        'submissions': sorted_submissions
+    }
+
+def get_user_history(nickname):
+    """Get submission history for a user."""
+    submissions = load_submissions()
+    user_history = []
+    
+    for date, date_submissions in submissions.items():
+        for submission in date_submissions:
+            if submission['nickname'] == nickname:
+                user_history.append({
+                    'date': date,
+                    'players': submission['players'],
+                    'results': submission['results']
+                })
+    
+    return sorted(user_history, key=lambda x: x['date'], reverse=True)
 
 def ensure_game_states_file():
     """Ensure the game states file exists with the correct columns"""
@@ -168,10 +209,10 @@ def submit_team():
         today = current_time.strftime('%Y-%m-%d')
         
         # Check if user already submitted today
-        df = load_submissions()
-        existing_submission = df[(df['submission_date'] == today) & (df['nickname'] == data['nickname'])]
+        submissions = load_submissions()
+        existing_submission = get_submissions_for_date(today)
         
-        if not existing_submission.empty:
+        if existing_submission:
             return jsonify({'error': 'You have already submitted a team today.'}), 409
 
         # Calculate team statistics
@@ -191,13 +232,10 @@ def submit_team():
         predicted_wins = data['results']['wins']
         
         # Save the submission
-        save_submission(
-            today,
+        add_submission(
             data['nickname'],
             data['players'],
-            data['results'],
-            predicted_wins,
-            team_stats
+            data['results']
         )
         
         # Save the game state if it doesn't exist
@@ -218,7 +256,7 @@ def submit_team():
         return jsonify({'error': str(e)}), 500
 
 @submissions_bp.route('/api/leaderboard', methods=['GET'])
-def get_leaderboard():
+def get_leaderboard_route():
     try:
         # Get date from query parameter or use current date
         date = request.args.get('date')
@@ -230,28 +268,9 @@ def get_leaderboard():
         
         logger.info(f"Fetching leaderboard for date: {date}")
         
-        # Load submissions
-        df = load_submissions()
+        leaderboard_data = get_leaderboard(date)
         
-        # Filter for the requested date and sort by predicted wins
-        daily_submissions = df[df['submission_date'] == date].sort_values('predicted_wins', ascending=False)
-        
-        # Convert to list of dictionaries
-        submissions = []
-        for _, row in daily_submissions.iterrows():
-            submissions.append({
-                'nickname': row['nickname'],
-                'players': row['players'],
-                'results': row['results'],
-                'predicted_wins': row['predicted_wins'],
-                'team_stats': row['team_stats']
-            })
-        
-        logger.info(f"Found {len(submissions)} submissions for date {date}")
-        return jsonify({
-            'date': date,
-            'submissions': submissions
-        }), 200
+        return jsonify(leaderboard_data), 200
         
     except Exception as e:
         logger.error(f"Error in get_leaderboard: {str(e)}")
@@ -322,16 +341,14 @@ def get_history():
         # Get user's submission history if nickname provided
         nickname = request.args.get('nickname')
         if nickname:
-            submissions_df = load_submissions()
-            user_submissions = submissions_df[submissions_df['nickname'] == nickname]
-            played_dates = user_submissions['submission_date'].unique().tolist()
-            logger.info(f"Found {len(played_dates)} played dates for user {nickname}")
+            user_history = get_user_history(nickname)
+            logger.info(f"Found {len(user_history)} played dates for user {nickname}")
         else:
-            played_dates = []
+            user_history = []
         
         return jsonify({
             'dates': dates,
-            'played_dates': played_dates
+            'played_dates': [h['date'] for h in user_history]
         }), 200
         
     except Exception as e:
@@ -352,4 +369,7 @@ def get_game_state(date):
         
     except Exception as e:
         logger.error(f"Error in get_game_state: {str(e)}")
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+# Initialize submissions file when module is imported
+ensure_submissions_file() 
