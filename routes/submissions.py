@@ -24,7 +24,7 @@ except Exception as e:
     raise
 
 # File to store submissions
-SUBMISSIONS_FILE = 'submissions.json'
+SUBMISSIONS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'submissions.json')
 
 # File to store game states
 GAME_STATES_FILE = 'game_states.csv'
@@ -32,9 +32,15 @@ GAME_STATES_FILE = 'game_states.csv'
 def ensure_submissions_file():
     """Ensure the submissions file exists."""
     if not os.path.exists(SUBMISSIONS_FILE):
-        with open(SUBMISSIONS_FILE, 'w') as f:
-            json.dump({}, f)
-        print(f"Created new submissions file: {SUBMISSIONS_FILE}")
+        try:
+            with open(SUBMISSIONS_FILE, 'w') as f:
+                json.dump({}, f)
+            # Ensure file permissions are set correctly
+            os.chmod(SUBMISSIONS_FILE, 0o666)
+            logger.info(f"Created new submissions file: {SUBMISSIONS_FILE}")
+        except Exception as e:
+            logger.error(f"Error creating submissions file: {str(e)}")
+            raise
 
 def load_submissions():
     """Load all submissions from the file."""
