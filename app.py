@@ -20,6 +20,7 @@ CORS(app, resources={
         "origins": [
             "https://master--budgetgm1.netlify.app",
             "https://budgetgm1.netlify.app",
+            "https://netlify-fix--budgetgm1.netlify.app",
             "http://localhost:3000",
             "http://localhost:5000"
         ],
