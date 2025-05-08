@@ -397,6 +397,12 @@ def get_game_state(date):
         logger.error(f"Error in get_game_state: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# Add health check endpoint
+@submissions_bp.route('/api/health', methods=['GET'])
+def health_check():
+    """Simple health check endpoint to keep the service alive."""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now(pytz.timezone('US/Eastern')).isoformat()}), 200
+
 # Initialize data directory and submissions file when module is imported
 ensure_data_directory()
 ensure_submissions_file() 
