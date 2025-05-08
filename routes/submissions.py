@@ -233,14 +233,11 @@ def submit_team():
         # Use the frontend's predicted wins
         predicted_wins = data['results']['wins']
         
-        # Save the submission with the predicted wins
+        # Save the submission
         success, message = add_submission(
             data['nickname'],
             data['players'],
-            {
-                'wins': predicted_wins,
-                'losses': 82 - predicted_wins
-            }
+            data['results']
         )
         
         if not success:
