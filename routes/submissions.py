@@ -51,8 +51,19 @@ def load_submissions():
     try:
         with open(SUBMISSIONS_FILE, 'r') as f:
             data = json.load(f)
+            # Validate data structure
+            if not isinstance(data, dict):
+                logger.error("Invalid submissions data structure - resetting to empty dict")
+                return {}
+            # Ensure all dates have lists
+            for date in data:
+                if not isinstance(data[date], list):
+                    data[date] = []
             logger.info(f"Loaded {sum(len(submissions) for submissions in data.values())} total submissions")
             return data
+    except json.JSONDecodeError:
+        logger.error("Error decoding submissions file - resetting to empty dict")
+        return {}
     except Exception as e:
         logger.error(f"Error loading submissions: {str(e)}")
         return {}
@@ -60,17 +71,46 @@ def load_submissions():
 def save_submissions(submissions):
     """Save all submissions to the file."""
     try:
+        # Create a backup of the current file
+        if os.path.exists(SUBMISSIONS_FILE):
+            backup_file = f"{SUBMISSIONS_FILE}.bak"
+            with open(SUBMISSIONS_FILE, 'r') as src, open(backup_file, 'w') as dst:
+                dst.write(src.read())
+        
+        # Save new data
         with open(SUBMISSIONS_FILE, 'w') as f:
             json.dump(submissions, f, indent=2)
         logger.info(f"Saved {sum(len(submissions) for submissions in submissions.values())} total submissions")
     except Exception as e:
         logger.error(f"Error saving submissions: {str(e)}")
+        # Try to restore from backup
+        if os.path.exists(f"{SUBMISSIONS_FILE}.bak"):
+            try:
+                with open(f"{SUBMISSIONS_FILE}.bak", 'r') as src, open(SUBMISSIONS_FILE, 'w') as dst:
+                    dst.write(src.read())
+                logger.info("Restored submissions from backup")
+            except Exception as restore_error:
+                logger.error(f"Error restoring from backup: {str(restore_error)}")
         raise
 
 def get_current_date():
-    """Get current date in Eastern time."""
+    """Get current date in Eastern time, ensuring it's after 1 AM."""
     eastern = pytz.timezone('US/Eastern')
-    return datetime.now(eastern).strftime('%Y-%m-%d')
+    current_time = datetime.now(eastern)
+    
+    # If it's before 1 AM, return previous day's date
+    if current_time.hour < 1:
+        current_time = current_time - pd.Timedelta(days=1)
+    
+    return current_time.strftime('%Y-%m-%d')
+
+def should_update_player_pool():
+    """Check if we need to update the player pool based on time."""
+    eastern = pytz.timezone('US/Eastern')
+    current_time = datetime.now(eastern)
+    
+    # Only update at exactly 1 AM Eastern
+    return current_time.hour == 1 and current_time.minute == 0
 
 def get_submissions_for_date(date=None):
     """Get submissions for a specific date."""
@@ -118,8 +158,16 @@ def get_leaderboard(date=None):
     
     submissions = get_submissions_for_date(date)
     
+    # Validate submissions data
+    valid_submissions = []
+    for submission in submissions:
+        if all(key in submission for key in ['nickname', 'players', 'results']):
+            valid_submissions.append(submission)
+        else:
+            logger.warning(f"Invalid submission found for date {date}: {submission}")
+    
     # Sort by wins
-    sorted_submissions = sorted(submissions, key=lambda x: x['results']['wins'], reverse=True)
+    sorted_submissions = sorted(valid_submissions, key=lambda x: x['results']['wins'], reverse=True)
     logger.info(f"Generated leaderboard for {date} with {len(sorted_submissions)} submissions")
     
     return {
@@ -384,7 +432,14 @@ def get_history():
 @submissions_bp.route('/api/game-state/<date>', methods=['GET'])
 def get_game_state(date):
     try:
-        state = load_game_state(date)
+        # Check if we need to update the player pool
+        if should_update_player_pool():
+            logger.info("It's 1 AM Eastern - time to update player pool")
+            # Force a refresh of the player pool
+            state = None
+        else:
+            state = load_game_state(date)
+            
         if state is None:
             return jsonify({'error': 'Game state not found for this date'}), 404
             
