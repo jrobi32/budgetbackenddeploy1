@@ -102,7 +102,9 @@ def get_current_date():
     if current_time.hour < 1 or (current_time.hour == 1 and current_time.minute == 0):
         current_time = current_time - pd.Timedelta(days=1)
     
-    return current_time.strftime('%Y-%m-%d')
+    date_str = current_time.strftime('%Y-%m-%d')
+    logger.info(f"Current game date: {date_str} (Eastern time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')})")
+    return date_str
 
 def should_update_player_pool():
     """Check if we need to update the player pool based on time."""
@@ -282,10 +284,9 @@ def submit_team():
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
             
-        # Get current date in Eastern time
-        eastern = pytz.timezone('US/Eastern')
-        current_time = datetime.now(eastern)
-        today = current_time.strftime('%Y-%m-%d')
+        # Get current game date
+        today = get_current_date()
+        logger.info(f"Processing submission for date: {today}")
         
         # Check if user already submitted today
         submissions = load_submissions()
@@ -294,6 +295,7 @@ def submit_team():
         if existing_submission:
             for submission in existing_submission:
                 if submission['nickname'] == data['nickname']:
+                    logger.info(f"User {data['nickname']} already submitted for {today}")
                     return jsonify({'error': 'You have already submitted a team today.'}), 409
 
         # Calculate team statistics
@@ -320,7 +322,10 @@ def submit_team():
         )
         
         if not success:
+            logger.error(f"Failed to save submission: {message}")
             return jsonify({'error': message}), 409
+        
+        logger.info(f"Successfully saved submission for {data['nickname']} on {today}")
         
         # Save the game state if it doesn't exist
         if not os.path.exists(GAME_STATES_FILE) or len(pd.read_csv(GAME_STATES_FILE)[pd.read_csv(GAME_STATES_FILE)['date'] == today]) == 0:
@@ -347,7 +352,9 @@ def get_leaderboard_route():
         if not date:
             date = get_current_date()
         
+        logger.info(f"Fetching leaderboard for date: {date}")
         leaderboard_data = get_leaderboard(date)
+        logger.info(f"Found {len(leaderboard_data['submissions'])} submissions for date {date}")
         return jsonify(leaderboard_data), 200
         
     except Exception as e:
