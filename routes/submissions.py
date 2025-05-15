@@ -94,12 +94,12 @@ def save_submissions(submissions):
         raise
 
 def get_current_date():
-    """Get current date in Eastern time, ensuring it's after 1 AM."""
+    """Get current date in Eastern time, ensuring it's after 1:00 AM."""
     eastern = pytz.timezone('US/Eastern')
     current_time = datetime.now(eastern)
     
-    # If it's before 1 AM, return previous day's date
-    if current_time.hour < 1:
+    # If it's before 1:00 AM, return previous day's date
+    if current_time.hour < 1 or (current_time.hour == 1 and current_time.minute == 0):
         current_time = current_time - pd.Timedelta(days=1)
     
     return current_time.strftime('%Y-%m-%d')
@@ -109,8 +109,15 @@ def should_update_player_pool():
     eastern = pytz.timezone('US/Eastern')
     current_time = datetime.now(eastern)
     
-    # Only update at exactly 1 AM Eastern
-    return current_time.hour == 1 and current_time.minute == 0
+    # Only update at exactly 1:00 AM Eastern
+    should_update = current_time.hour == 1 and current_time.minute == 0
+    
+    if should_update:
+        logger.info(f"Player pool update triggered at {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    else:
+        logger.debug(f"Player pool update check at {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')} - no update needed")
+    
+    return should_update
 
 def get_submissions_for_date(date=None):
     """Get submissions for a specific date."""
@@ -230,12 +237,25 @@ def save_game_state(date, player_stats):
             'player_stats': player_stats
         }])
         
+        # Create backup before saving
+        if os.path.exists(GAME_STATES_FILE):
+            backup_file = f"{GAME_STATES_FILE}.bak"
+            df.to_csv(backup_file, index=False)
+            logger.info(f"Created backup of game states file before saving new state")
+        
         df = pd.concat([df, new_row], ignore_index=True)
         df.to_csv(GAME_STATES_FILE, index=False)
         logger.info(f"Saved game state for {date} with {len(eval(player_stats))} players")
         
     except Exception as e:
         logger.error(f"Error saving game state: {str(e)}")
+        # Try to restore from backup
+        if os.path.exists(f"{GAME_STATES_FILE}.bak"):
+            try:
+                pd.read_csv(f"{GAME_STATES_FILE}.bak").to_csv(GAME_STATES_FILE, index=False)
+                logger.info("Restored game states from backup after error")
+            except Exception as restore_error:
+                logger.error(f"Error restoring game states from backup: {str(restore_error)}")
         raise
 
 def load_game_state(date):
@@ -432,15 +452,23 @@ def get_history():
 @submissions_bp.route('/api/game-state/<date>', methods=['GET'])
 def get_game_state(date):
     try:
+        # Log the current time in Eastern
+        eastern = pytz.timezone('US/Eastern')
+        current_time = datetime.now(eastern)
+        logger.info(f"Game state request at {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')} for date {date}")
+        
         # Check if we need to update the player pool
         if should_update_player_pool():
-            logger.info("It's 1 AM Eastern - time to update player pool")
+            logger.info("It's 1:00 AM Eastern - time to update player pool")
             # Force a refresh of the player pool
             state = None
         else:
             state = load_game_state(date)
+            if state is None:
+                logger.warning(f"Game state is None for date {date} - this will trigger a player pool reset")
             
         if state is None:
+            logger.warning(f"Returning 404 for date {date} - game state not found")
             return jsonify({'error': 'Game state not found for this date'}), 404
             
         return jsonify({
