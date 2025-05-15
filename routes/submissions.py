@@ -143,19 +143,15 @@ def add_submission(nickname, players, results):
             return False, "You have already submitted a team for today"
     
     # Add new submission
-    new_submission = {
+    submissions[date].append({
         'nickname': nickname,
         'players': players,
         'results': results,
         'timestamp': datetime.now(pytz.timezone('US/Eastern')).isoformat()
-    }
-    
-    submissions[date].append(new_submission)
-    logger.info(f"Adding submission for {nickname} on {date} with {results['wins']} wins")
+    })
     
     try:
         save_submissions(submissions)
-        logger.info(f"Successfully saved submission for {nickname} on {date}")
         return True, "Submission successful"
     except Exception as e:
         logger.error(f"Error saving submission: {str(e)}")
@@ -167,19 +163,9 @@ def get_leaderboard(date=None):
         date = get_current_date()
     
     submissions = get_submissions_for_date(date)
-    logger.info(f"Retrieved {len(submissions)} submissions for date {date}")
-    
-    # Validate submissions data
-    valid_submissions = []
-    for submission in submissions:
-        if all(key in submission for key in ['nickname', 'players', 'results']):
-            valid_submissions.append(submission)
-        else:
-            logger.warning(f"Invalid submission found for date {date}: {submission}")
     
     # Sort by wins
-    sorted_submissions = sorted(valid_submissions, key=lambda x: x['results']['wins'], reverse=True)
-    logger.info(f"Generated leaderboard for {date} with {len(sorted_submissions)} submissions")
+    sorted_submissions = sorted(submissions, key=lambda x: x['results']['wins'], reverse=True)
     
     return {
         'date': date,
@@ -361,11 +347,7 @@ def get_leaderboard_route():
         if not date:
             date = get_current_date()
         
-        logger.info(f"Fetching leaderboard for date: {date}")
-        
         leaderboard_data = get_leaderboard(date)
-        logger.info(f"Leaderboard data: {leaderboard_data}")
-        
         return jsonify(leaderboard_data), 200
         
     except Exception as e:
