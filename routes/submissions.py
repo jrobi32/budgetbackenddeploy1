@@ -143,16 +143,19 @@ def add_submission(nickname, players, results):
             return False, "You have already submitted a team for today"
     
     # Add new submission
-    submissions[date].append({
+    new_submission = {
         'nickname': nickname,
         'players': players,
         'results': results,
         'timestamp': datetime.now(pytz.timezone('US/Eastern')).isoformat()
-    })
+    }
+    
+    submissions[date].append(new_submission)
+    logger.info(f"Adding submission for {nickname} on {date} with {results['wins']} wins")
     
     try:
         save_submissions(submissions)
-        logger.info(f"Added submission for {nickname} on {date}")
+        logger.info(f"Successfully saved submission for {nickname} on {date}")
         return True, "Submission successful"
     except Exception as e:
         logger.error(f"Error saving submission: {str(e)}")
@@ -164,6 +167,7 @@ def get_leaderboard(date=None):
         date = get_current_date()
     
     submissions = get_submissions_for_date(date)
+    logger.info(f"Retrieved {len(submissions)} submissions for date {date}")
     
     # Validate submissions data
     valid_submissions = []
@@ -355,14 +359,12 @@ def get_leaderboard_route():
         # Get date from query parameter or use current date
         date = request.args.get('date')
         if not date:
-            # Get current date in Eastern time
-            eastern = pytz.timezone('US/Eastern')
-            current_time = datetime.now(eastern)
-            date = current_time.strftime('%Y-%m-%d')
+            date = get_current_date()
         
         logger.info(f"Fetching leaderboard for date: {date}")
         
         leaderboard_data = get_leaderboard(date)
+        logger.info(f"Leaderboard data: {leaderboard_data}")
         
         return jsonify(leaderboard_data), 200
         
